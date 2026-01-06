@@ -9,19 +9,11 @@ export async function POST(req: Request) {
         if (!sessionId || !teamName) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
 
         // TRY 1: Direct ID
-        let session = GameStorage.get(sessionId);
+        let session = await GameStorage.get(sessionId);
 
         // TRY 2: Lookup by Join Code
         if (!session) {
-            const allSessions = GameStorage.getAll();
-            const foundId = Object.keys(allSessions).find(key => {
-                const s = allSessions[key];
-                const search = String(sessionId).toUpperCase(); // Ensure string
-                return (s.joinCode && s.joinCode === search) ||
-                    (s.id === sessionId) ||
-                    (s.id.toUpperCase().startsWith(search) && search.length >= 4);
-            });
-            if (foundId) session = allSessions[foundId];
+            session = await GameStorage.getByJoinCode(sessionId);
         }
 
         if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -29,7 +21,7 @@ export async function POST(req: Request) {
         if (session.phase !== 'LOBBY') return NextResponse.json({ error: 'Game started' }, { status: 400 });
 
         const updatedTeam = GameEngine.addTeam(session, teamName);
-        GameStorage.save(session);
+        await GameStorage.save(session);
 
         return NextResponse.json({ teamId: updatedTeam.id, team: updatedTeam });
     } catch (e) {

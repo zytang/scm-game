@@ -1,86 +1,67 @@
 
-import fs from 'fs';
-import path from 'path';
 import { GameSession } from '@/types/game';
+import { kv } from '@vercel/kv';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'sessions.json');
-
-// In-memory fallback for environments with read-only filesystems (like Vercel)
-// This will persist as long as the serverless function instance is warm.
-// Using globalThis ensures it survives HMR in dev and stays accessible in production.
+// Fallback for local development when KV isn't configured
+// Using a global variable for in-memory fallback to work across HMR/Serverless warm starts
 const globalStorage = globalThis as unknown as { _scm_sessions?: Record<string, GameSession> };
 if (!globalStorage._scm_sessions) {
     globalStorage._scm_sessions = {};
 }
 
-// Ensure DB exists (Safely)
-function ensureDB() {
-    try {
-        if (!fs.existsSync(DATA_DIR)) {
-            fs.mkdirSync(DATA_DIR, { recursive: true });
-        }
-        if (!fs.existsSync(DB_FILE)) {
-            fs.writeFileSync(DB_FILE, JSON.stringify({}));
-        }
-        return true;
-    } catch (e) {
-        console.warn("Storage: Local filesystem is write-protected. Falling back to in-memory storage.");
-        return false;
-    }
-}
-
-type DBData = Record<string, GameSession>;
-
 export const GameStorage = {
-    getAll: (): DBData => {
-        const canUseFS = ensureDB();
-
-        // Try to read from disk first
-        if (canUseFS) {
-            try {
-                const data = fs.readFileSync(DB_FILE, 'utf-8');
-                const parsed = JSON.parse(data) as DBData;
-                // Merge with in-memory to ensure latest state
-                globalStorage._scm_sessions = { ...parsed, ...globalStorage._scm_sessions };
-                return globalStorage._scm_sessions;
-            } catch (error) {
-                console.error("Error reading DB:", error);
+    get: async (id: string): Promise<GameSession | null> => {
+        try {
+            const session = await kv.get<GameSession>(`session:${id}`);
+            if (session) {
+                // Keep local memory in sync
+                if (globalStorage._scm_sessions) globalStorage._scm_sessions[id] = session;
+                return session;
             }
+        } catch (e) {
+            console.warn("Storage: KV not available, falling back to local memory.");
         }
-
-        return globalStorage._scm_sessions || {};
+        return globalStorage._scm_sessions?.[id] || null;
     },
 
-    get: (id: string): GameSession | null => {
-        const data = GameStorage.getAll();
-        return data[id] || null;
-    },
-
-    save: (session: GameSession): void => {
-        const canUseFS = ensureDB();
-
-        // Update memory first
+    save: async (session: GameSession): Promise<void> => {
+        // Update memory immediately
         if (globalStorage._scm_sessions) {
             globalStorage._scm_sessions[session.id] = session;
         }
 
-        // Try to persist to disk if possible
-        if (canUseFS) {
-            try {
-                fs.writeFileSync(DB_FILE, JSON.stringify(globalStorage._scm_sessions, null, 2));
-            } catch (e) {
-                // Ignore write errors in production
-            }
+        try {
+            // Persist to Vercel KV with a 24-hour expiration (86400 seconds)
+            await kv.set(`session:${session.id}`, session, { ex: 86400 });
+
+            // Also maintain a 'joinCode' mapping so students can find sessions independently of the ID
+            await kv.set(`joincode:${session.joinCode.toUpperCase()}`, session.id, { ex: 86400 });
+        } catch (e) {
+            console.error("Storage: Failed to save to KV", e);
         }
     },
 
-    update: (id: string, updater: (session: GameSession) => GameSession): GameSession | null => {
-        const data = GameStorage.getAll();
-        if (!data[id]) return null;
+    getByJoinCode: async (joinCode: string): Promise<GameSession | null> => {
+        try {
+            const id = await kv.get<string>(`joincode:${joinCode.toUpperCase()}`);
+            if (id) {
+                return await GameStorage.get(id);
+            }
+        } catch (e) {
+            console.error("Storage: KV Error in getByJoinCode", e);
+        }
 
-        const updated = updater({ ...data[id] });
-        GameStorage.save(updated);
+        // Local fallback if KV fails or is empty
+        const session = Object.values(globalStorage._scm_sessions || {}).find(s => s.joinCode === joinCode.toUpperCase());
+        return session || null;
+    },
+
+    update: async (id: string, updater: (session: GameSession) => GameSession): Promise<GameSession | null> => {
+        const session = await GameStorage.get(id);
+        if (!session) return null;
+
+        const updated = updater({ ...session });
+        await GameStorage.save(updated);
         return updated;
     }
 };

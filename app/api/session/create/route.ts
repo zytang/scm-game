@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         };
 
         const session = GameEngine.createSession(config);
-        GameStorage.save(session);
+        await GameStorage.save(session);
         return NextResponse.json({ sessionId: session.id, session });
     } catch (e) {
         return NextResponse.json({ error: 'Internal Error' }, { status: 500 });

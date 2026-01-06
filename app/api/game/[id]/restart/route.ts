@@ -9,7 +9,7 @@ interface RouteParams {
 
 export async function POST(req: Request, { params }: RouteParams) {
     const { id: sessionId } = await params;
-    const session = GameStorage.get(sessionId);
+    const session = await GameStorage.get(sessionId);
 
     if (!session) {
         return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     GameEngine.restartGame(session);
-    GameStorage.save(session);
+    await GameStorage.save(session);
 
     return NextResponse.json({ success: true, session });
 }

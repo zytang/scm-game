@@ -11,17 +11,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         return NextResponse.json({ error: 'teamId required' }, { status: 400 });
     }
 
-    let session = GameStorage.get(params.id);
+    let session = await GameStorage.get(params.id);
 
     if (!session) {
-        const allSessions = GameStorage.getAll();
-        const foundId = Object.keys(allSessions).find(key => {
-            const s = allSessions[key];
-            const search = params.id.toUpperCase();
-            return (s.joinCode && s.joinCode === search) ||
-                (s.id.toUpperCase().startsWith(search) && search.length >= 4);
-        });
-        if (foundId) session = allSessions[foundId];
+        session = await GameStorage.getByJoinCode(params.id);
     }
 
     if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -36,7 +29,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     }
 
     GameEngine.processTeamRound(session, teamId);
-    GameStorage.save(session);
+    await GameStorage.save(session);
 
     return NextResponse.json({
         success: true,
