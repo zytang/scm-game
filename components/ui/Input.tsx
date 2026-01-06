@@ -2,7 +2,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { InputHTMLAttributes } from 'react';
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'className'> {
     label?: string;
     className?: ClassValue;
 }

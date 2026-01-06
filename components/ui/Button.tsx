@@ -2,7 +2,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { ButtonHTMLAttributes, ReactNode } from 'react';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
     children: ReactNode;
     variant?: 'primary' | 'secondary' | 'danger';
     className?: ClassValue;

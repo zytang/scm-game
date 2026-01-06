@@ -5,8 +5,8 @@ import { Role } from '../types/game';
 
 // Mock Storage to avoid File IO issues or just use it if it works
 const mockStorage = {
-    save: (s) => { },
-    get: (id) => null
+    save: (s: any) => { },
+    get: (id: string) => null
 };
 
 async function runSimulation() {
