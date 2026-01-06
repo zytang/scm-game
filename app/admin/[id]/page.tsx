@@ -14,9 +14,16 @@ export default function AdminControl() {
     const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
     const [forceAdvanceTeamId, setForceAdvanceTeamId] = useState<string | null>(null);
 
+    const [loading, setLoading] = useState(false);
+
     const fetchState = async () => {
-        const res = await fetch(`/api/game/${id}/state`);
-        if (res.ok) setSession(await res.json());
+        try {
+            const res = await fetch(`/api/game/${id}/state`);
+            if (res.ok) setSession(await res.json());
+            else console.error("Admin: Failed to fetch state", res.status);
+        } catch (e) {
+            console.error("Admin: Network error", e);
+        }
     };
 
     useEffect(() => {
@@ -26,23 +33,47 @@ export default function AdminControl() {
     }, [id]);
 
     const handleAdvance = async () => {
-        await fetch(`/api/game/${id}/advance`, { method: 'POST' });
-        fetchState();
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/game/${id}/advance`, { method: 'POST' });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(`Error: ${data.error || 'Failed to advance game'}`);
+            }
+        } catch (e) {
+            alert("Network error: Could not reach the server.");
+        } finally {
+            await fetchState();
+            setLoading(false);
+        }
     };
 
     const handleForceAdvanceTeam = async (teamId: string) => {
-        await fetch(`/api/game/${id}/advance-team`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teamId })
-        });
+        try {
+            const res = await fetch(`/api/game/${id}/advance-team`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId })
+            });
+            if (!res.ok) alert("Failed to advance team");
+        } catch (e) {
+            alert("Network error");
+        }
         fetchState();
     };
 
     const handleRestart = async () => {
         if (!confirm('Are you sure you want to restart the game? All progress will be reset.')) return;
-        await fetch(`/api/game/${id}/restart`, { method: 'POST' });
-        fetchState();
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/game/${id}/restart`, { method: 'POST' });
+            if (!res.ok) alert("Failed to restart game");
+        } catch (e) {
+            alert("Network error");
+        } finally {
+            await fetchState();
+            setLoading(false);
+        }
     };
 
     if (!session) return <div className="p-8 text-blue-400">Loading Control Room...</div>;
@@ -81,10 +112,14 @@ export default function AdminControl() {
                         <Button
                             onClick={handleAdvance}
                             className="w-full"
-                            disabled={session.phase === 'COMPLETED' || session.phase === 'PLAYING'}
+                            disabled={loading || session.phase === 'COMPLETED' || session.phase === 'PLAYING'}
                         >
-                            {session.phase === 'LOBBY' ? 'Start Game' : 'Game Running'}
-                            <Play className="w-4 h-4 ml-2" />
+                            {loading ? 'Starting...' : session.phase === 'LOBBY' ? 'Start Game' : 'Game Running'}
+                            {loading ? (
+                                <div className="ml-2 w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <Play className="w-4 h-4 ml-2" />
+                            )}
                         </Button>
 
                         {/* Per-Team Force Advance */}

@@ -11,7 +11,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         session = await GameStorage.getByJoinCode(params.id);
     }
 
-    if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!session) {
+        console.error(`Advance: Session ${params.id} not found in storage.`);
+        return NextResponse.json({ error: `Session ${params.id} not found. Ensure KV is connected.` }, { status: 404 });
+    }
 
     if (session.phase === 'LOBBY') {
         GameEngine.startGame(session);
